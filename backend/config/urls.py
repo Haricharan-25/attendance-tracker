@@ -7,6 +7,8 @@ from rest_framework_simplejwt.views import (
 )
 
 def health_check(request):
+    if request.method == "HEAD":
+        return HttpResponse(status=200)
     return HttpResponse("OK", status=200)
 
 urlpatterns = [
