@@ -14,10 +14,10 @@ __pycache__/
 .env.local
 .env.*.local
 
-# Playwright artifacts & screenshots
-*.png
-*.html
-test_*.py
+# Playwright artifacts & screenshots (backend only)
+backend/*.png
+backend/*.html
+backend/test_*.py
 
 # Node
 node_modules/
