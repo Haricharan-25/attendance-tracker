@@ -1,12 +1,16 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.http import HttpResponse
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 
+def health_check(request):
+    return HttpResponse("OK", status=200)
 
 urlpatterns = [
+    path("", health_check, name="health_check"),
     path("admin/", admin.site.urls),
 
     path(
@@ -25,4 +29,4 @@ urlpatterns = [
         TokenRefreshView.as_view(),
         name="token_refresh",
     ),
-]
+]
