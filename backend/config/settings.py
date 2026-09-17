@@ -9,6 +9,8 @@ https://docs.djangoproject.com/en/6.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
+
+# pyrefly: ignore [missing-import]
 import dj_database_url
 from pathlib import Path
 
