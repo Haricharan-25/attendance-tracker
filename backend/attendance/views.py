@@ -550,23 +550,13 @@ class ChallengesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        challenges = Challenge.objects.filter(active=True)
-        completed_ids = set(
-            UserChallenge.objects.filter(
-                user=request.user, completed=True
-            ).values_list("challenge_id", flat=True)
-        )
-
-        data = []
-        for c in challenges:
-            data.append({
-                "id": c.id,
-                "title": c.title,
-                "description": c.description,
-                "xp_reward": c.xp_reward,
-                "completed": c.id in completed_ids,
-            })
-
+        """
+        Returns active and completed challenges for the authenticated user,
+        along with XP, level, streak, and progress metrics.
+        Guarantees user isolation: only request.user data is retrieved.
+        """
+        from attendance.services.gamification_service import get_user_challenges_and_progress
+        data = get_user_challenges_and_progress(request.user)
         return Response(data, status=status.HTTP_200_OK)
 
 
@@ -574,7 +564,13 @@ class BadgesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        badges = Badge.objects.all()
+        """
+        Returns all badges with unlocked/locked status for the authenticated user.
+        """
+        from attendance.services.gamification_service import initialize_default_challenges_and_badges
+        initialize_default_challenges_and_badges()
+
+        badges = Badge.objects.all().order_by("id")
         earned_badges = {
             ub.badge_id: ub.earned_at
             for ub in UserBadge.objects.filter(user=request.user)
@@ -607,6 +603,7 @@ class SyncAttendanceView(APIView):
         Runs GEMS scraper on-demand using current student's roll number
         and the provided GEMS password.
         Never stores GEMS password in database or response.
+        Automatically updates streak, evaluates challenges, awards XP, and unlocks badges.
         """
         gems_password = request.data.get("password")
         if not gems_password:
@@ -619,6 +616,7 @@ class SyncAttendanceView(APIView):
         try:
             import asyncio
             from attendance.services.gems_service import get_gems_attendance
+            from attendance.services.gamification_service import evaluate_user_gamification
 
             # 1. Fetch current cached attendance for delta calculation
             prev_cache = get_cached_attendance(roll_number)
@@ -638,25 +636,39 @@ class SyncAttendanceView(APIView):
             delta_attended = new_attended - prev_attended
             delta_total = new_total - prev_total
 
-
             # Update streak and award XP if student attended all new classes
-            profile = Profile.objects.filter(user=request.user).first()
+            profile, _ = Profile.objects.get_or_create(user=request.user)
             streak_info = {}
-            if profile:
+            if delta_total != 0 or delta_attended != 0:
                 streak_info = profile.record_attendance_update(
                     delta_attended=delta_attended,
                     delta_total=delta_total,
                 )
+            else:
+                streak_info = {
+                    "current_streak": profile.current_streak,
+                    "best_streak": profile.best_streak,
+                    "pending_classes": profile.pending_classes,
+                    "xp_gained": 0,
+                }
+
+            # 3. Authoritatively evaluate challenges and badges
+            gamification_result = evaluate_user_gamification(
+                user=request.user,
+                attendance_data=data,
+                delta_attended=delta_attended,
+                delta_total=delta_total,
+            )
 
             return Response(
                 {
                     "message": "Attendance synced successfully.",
                     "subject_count": len(data) if data else 0,
                     "streak_info": streak_info,
+                    "gamification": gamification_result,
                 },
                 status=status.HTTP_200_OK,
             )
-
 
         except Exception as e:
             print("\n========== SYNC ATTENDANCE ERROR ==========")
@@ -666,4 +678,5 @@ class SyncAttendanceView(APIView):
             return Response(
                 {"message": "Failed to sync attendance from GEMS."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            )
+

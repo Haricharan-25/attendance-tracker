@@ -51,7 +51,7 @@ class Profile(models.Model):
 
     def calculate_level(self):
         if self.xp >= 1000:
-            return 5
+            return 5 + (self.xp - 1000) // 500
         elif self.xp >= 500:
             return 4
         elif self.xp >= 250:
@@ -60,6 +60,35 @@ class Profile(models.Model):
             return 2
         else:
             return 1
+
+    def get_level_progress(self):
+        """
+        Returns level info with progress towards next level.
+        """
+        lvl = self.calculate_level()
+        thresholds = [
+            (1, 0, 100),
+            (2, 100, 250),
+            (3, 250, 500),
+            (4, 500, 1000),
+        ]
+        if lvl <= 4:
+            for l_num, min_xp, max_xp in thresholds:
+                if lvl == l_num:
+                    return {
+                        "level": lvl,
+                        "xp": self.xp,
+                        "min_xp": min_xp,
+                        "next_level_xp": max_xp,
+                    }
+        # For Level 5 and above:
+        base_lvl5 = 1000 + (lvl - 5) * 500
+        return {
+            "level": lvl,
+            "xp": self.xp,
+            "min_xp": base_lvl5,
+            "next_level_xp": base_lvl5 + 500,
+        }
 
     def record_attendance_update(self, delta_attended, delta_total):
         """
@@ -249,11 +278,31 @@ class UserBadge(models.Model):
 
 
 class Challenge(models.Model):
+    CHALLENGE_TYPE_CHOICES = [
+        ("streak_3", "3-Day Streak"),
+        ("streak_7", "7-Day Streak"),
+        ("overall_75", "75% Club"),
+        ("overall_80", "80% Club"),
+        ("perfect_week", "Perfect Week"),
+        ("subject_saver", "Subject Saver"),
+        ("custom", "Custom Challenge"),
+    ]
+
     title = models.CharField(
         max_length=150
     )
 
     description = models.TextField()
+
+    challenge_type = models.CharField(
+        max_length=50,
+        choices=CHALLENGE_TYPE_CHOICES,
+        default="custom"
+    )
+
+    target = models.FloatField(
+        default=0.0
+    )
 
     xp_reward = models.PositiveIntegerField(
         default=0
@@ -262,6 +311,16 @@ class Challenge(models.Model):
     active = models.BooleanField(
         default=True
     )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+        blank=True
+    )
+
+    @property
+    def name(self):
+        return self.title
 
     def __str__(self):
         return self.title
@@ -279,6 +338,28 @@ class UserChallenge(models.Model):
         on_delete=models.CASCADE
     )
 
+    progress = models.FloatField(
+        default=0.0
+    )
+
+    target = models.FloatField(
+        default=0.0
+    )
+
+    subject_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default=""
+    )
+
+    baseline_attended = models.PositiveIntegerField(
+        default=0
+    )
+
+    baseline_total = models.PositiveIntegerField(
+        default=0
+    )
+
     completed = models.BooleanField(
         default=False
     )
@@ -288,8 +369,15 @@ class UserChallenge(models.Model):
         blank=True
     )
 
+    xp_awarded = models.BooleanField(
+        default=False
+    )
+
     class Meta:
         unique_together = (
             "user",
             "challenge",
         )
+
+    def __str__(self):
+        return f"{self.user.username} - {self.challenge.title} ({'Done' if self.completed else 'Active'})"

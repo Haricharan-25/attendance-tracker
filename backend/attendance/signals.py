@@ -12,3 +12,8 @@ def create_user_profile(sender, instance, created, **kwargs):
         Profile.objects.create(
             user=instance
         )
+        try:
+            from attendance.services.gamification_service import ensure_user_challenges
+            ensure_user_challenges(instance)
+        except Exception:
+            pass

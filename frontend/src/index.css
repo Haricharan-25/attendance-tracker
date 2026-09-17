@@ -737,6 +737,7 @@ body {
   padding: 9px 0;
   border-radius: 12px;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .tab-pill-btn.active {
@@ -744,6 +745,79 @@ body {
   color: #fff;
 }
 
+/* User Progress Hero Card */
+.user-progress-hero-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(17, 24, 39, 0.95) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 22px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 25px -10px rgba(99, 102, 241, 0.2);
+}
+
+.progress-hero-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.hero-level-pill {
+  background: rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  font-size: 14px;
+  font-weight: 800;
+  padding: 4px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+
+.hero-streak-pill {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.hero-xp-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 8px;
+}
+
+.hero-progress-bar-bg {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.hero-progress-bar-fill {
+  height: 100%;
+  background: var(--accent-gradient);
+  border-radius: 10px;
+  transition: width 0.6s ease;
+}
+
+/* Section Titles */
+.challenges-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin: 20px 0 12px 2px;
+}
+
+/* Challenge Cards */
 .quest-items-list {
   display: flex;
   flex-direction: column;
@@ -751,51 +825,144 @@ body {
 }
 
 .quest-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
   padding: 16px;
   display: flex;
   gap: 14px;
   align-items: flex-start;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.quest-card:active {
+  transform: scale(0.99);
+}
+
+.quest-completed {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.04);
 }
 
 .quest-icon-col {
-  font-size: 24px;
+  font-size: 26px;
+  flex-shrink: 0;
+  padding-top: 2px;
 }
 
 .quest-info-col {
   flex: 1;
 }
 
+.quest-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
 .quest-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
+  color: #fff;
+}
+
+.subject-badge-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-bottom: 6px;
 }
 
 .quest-desc {
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.quest-progress-block {
+  margin-bottom: 10px;
+}
+
+.quest-progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.quest-progress-header strong {
+  color: #fff;
+}
+
+.quest-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.quest-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1 0%, #38bdf8 100%);
+  border-radius: 6px;
+  transition: width 0.5s ease;
+}
+
+.quest-progress-bar-fill.fill-completed {
+  background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
 }
 
 .quest-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-top: 4px;
 }
 
 .reward-tag {
   background: rgba(251, 191, 36, 0.15);
   color: var(--accent-xp);
+  border: 1px solid rgba(251, 191, 36, 0.25);
   font-size: 11px;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.completed-reward-tag {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
   border-radius: 6px;
 }
 
 .quest-status {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
+.text-safe {
+  color: var(--color-safe);
+}
+
+.text-pending {
+  color: var(--text-muted);
+}
+
+/* Badges / Achievements Section */
 .badges-grid-layout {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -809,6 +976,20 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  border-radius: 18px;
+  transition: all 0.2s;
+}
+
+.badge-unlocked {
+  background: rgba(17, 24, 39, 0.85);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 4px 15px -4px rgba(16, 185, 129, 0.15);
+}
+
+.badge-locked {
+  background: rgba(17, 24, 39, 0.5);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  opacity: 0.65;
 }
 
 .badge-icon-bubble {
@@ -817,19 +998,22 @@ body {
 }
 
 .badge-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
+  color: #fff;
 }
 
 .badge-desc {
   font-size: 11px;
   color: var(--text-muted);
+  line-height: 1.3;
 }
 
 .badge-xp-reward {
   font-size: 11px;
   font-weight: 800;
   color: var(--accent-xp);
+  margin-top: 4px;
 }
 
 /* ==========================================================

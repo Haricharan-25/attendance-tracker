@@ -4,7 +4,18 @@ import api from "../services/api";
 import BottomNav from "../components/BottomNav";
 
 function Challenges() {
-  const [challenges, setChallenges] = useState([]);
+  const [challengesData, setChallengesData] = useState({
+    user_progress: {
+      level: 1,
+      xp: 0,
+      min_xp: 0,
+      next_level_xp: 100,
+      streak: 0,
+      best_streak: 0,
+    },
+    active: [],
+    completed: [],
+  });
   const [badges, setBadges] = useState([]);
   const [activeTab, setActiveTab] = useState("challenges");
   const [loading, setLoading] = useState(true);
@@ -21,13 +32,31 @@ function Challenges() {
 
     Promise.all([api.get("/challenges/"), api.get("/badges/")])
       .then(([chalRes, badgeRes]) => {
-        setChallenges(chalRes.data || []);
+        if (chalRes.data) {
+          // Check if format is new object or legacy array
+          if (chalRes.data.active !== undefined) {
+            setChallengesData(chalRes.data);
+          } else if (Array.isArray(chalRes.data)) {
+            setChallengesData({
+              user_progress: {
+                level: 1,
+                xp: 0,
+                min_xp: 0,
+                next_level_xp: 100,
+                streak: 0,
+                best_streak: 0,
+              },
+              active: chalRes.data.filter((c) => !c.completed),
+              completed: chalRes.data.filter((c) => c.completed),
+            });
+          }
+        }
         setBadges(badgeRes.data || []);
         setError("");
       })
       .catch((err) => {
-        console.error(err);
-        setError("Failed to load challenges and badges.");
+        console.error("Error loading challenges:", err);
+        setError("Unable to load challenges. Please try again.");
       })
       .finally(() => setLoading(false));
   }, [navigate]);
@@ -41,14 +70,73 @@ function Challenges() {
     );
   }
 
+  const { user_progress, active, completed } = challengesData;
+
+  // Calculate XP progress bar percentage
+  const currentXp = user_progress?.xp || 0;
+  const minXp = user_progress?.min_xp || 0;
+  const maxXp = user_progress?.next_level_xp || 100;
+  const xpInLevel = Math.max(0, currentXp - minXp);
+  const xpSpan = Math.max(1, maxXp - minXp);
+  const xpPercentage = Math.min(Math.round((xpInLevel / xpSpan) * 100), 100);
+
+  const getChallengeIcon = (type, isDone) => {
+    if (isDone) return "✅";
+    switch (type) {
+      case "streak_3":
+      case "streak_7":
+        return "🔥";
+      case "overall_75":
+      case "overall_80":
+        return "🎯";
+      case "perfect_week":
+        return "⚡";
+      case "subject_saver":
+        return "📚";
+      default:
+        return "🎯";
+    }
+  };
+
+  const formatProgressDisplay = (c) => {
+    if (c.challenge_type === "overall_75" || c.challenge_type === "overall_80") {
+      return `${c.progress}% / ${c.target}%`;
+    }
+    if (c.challenge_type === "streak_3" || c.challenge_type === "streak_7") {
+      return `${Math.round(c.progress)} / ${Math.round(c.target)} days`;
+    }
+    if (c.challenge_type === "perfect_week") {
+      return c.progress >= 1.0 ? "1 / 1 week" : "In progress";
+    }
+    return `${Math.round(c.progress)} / ${Math.round(c.target)}`;
+  };
+
   return (
     <div className="mobile-page-container">
       <header className="mobile-top-header">
         <div>
-          <h1 className="user-title">Quests & Badges</h1>
-          <span className="sub-heading">Earn XP and level up your status</span>
+          <h1 className="user-title">Challenges</h1>
+          <span className="sub-heading">Level up with attendance milestones</span>
         </div>
       </header>
+
+      {/* Your Progress Card */}
+      <div className="user-progress-hero-card">
+        <div className="progress-hero-header">
+          <span className="hero-level-pill">Level {user_progress?.level || 1}</span>
+          <span className="hero-streak-pill">🔥 {user_progress?.streak || 0} Day Streak</span>
+        </div>
+        <div className="hero-xp-row">
+          <span>{currentXp} / {maxXp} XP</span>
+          <span>{xpPercentage}%</span>
+        </div>
+        <div className="hero-progress-bar-bg">
+          <div
+            className="hero-progress-bar-fill"
+            style={{ width: `${xpPercentage}%` }}
+          ></div>
+        </div>
+      </div>
 
       {/* Tab Switcher */}
       <div className="tab-pill-switcher">
@@ -56,7 +144,13 @@ function Challenges() {
           className={`tab-pill-btn ${activeTab === "challenges" ? "active" : ""}`}
           onClick={() => setActiveTab("challenges")}
         >
-          Active Quests ({challenges.length})
+          Active ({active?.length || 0})
+        </button>
+        <button
+          className={`tab-pill-btn ${activeTab === "completed" ? "active" : ""}`}
+          onClick={() => setActiveTab("completed")}
+        >
+          Completed ({completed?.length || 0})
         </button>
         <button
           className={`tab-pill-btn ${activeTab === "badges" ? "active" : ""}`}
@@ -68,61 +162,130 @@ function Challenges() {
 
       {error && <div className="alert-message error">{error}</div>}
 
-      {/* Challenges List */}
+      {/* Active Challenges */}
       {activeTab === "challenges" && (
-        <div className="quest-items-list">
-          {challenges.length === 0 ? (
-            <div className="empty-state-card mini">
-              <p>No active challenges at the moment. Keep your attendance high!</p>
-            </div>
-          ) : (
-            challenges.map((c) => (
-              <div
-                key={c.id}
-                className={`quest-card ${c.completed ? "quest-completed" : ""}`}
-              >
-                <div className="quest-icon-col">
-                  {c.completed ? "✅" : "🎯"}
-                </div>
-                <div className="quest-info-col">
-                  <h3 className="quest-title">{c.title}</h3>
-                  <p className="quest-desc">{c.description}</p>
-                  <div className="quest-footer">
-                    <span className="reward-tag">+{c.xp_reward} XP</span>
-                    <span className={`quest-status ${c.completed ? "text-safe" : "text-pending"}`}>
-                      {c.completed ? "Completed" : "In Progress"}
-                    </span>
+        <section>
+          <div className="challenges-section-title">Active Challenges</div>
+          <div className="quest-items-list">
+            {(!active || active.length === 0) ? (
+              <div className="empty-state-card mini">
+                <p>No active challenges right now. Keep your attendance high!</p>
+              </div>
+            ) : (
+              active.map((c) => (
+                <div key={c.id} className="quest-card">
+                  <div className="quest-icon-col">
+                    {getChallengeIcon(c.challenge_type, false)}
+                  </div>
+                  <div className="quest-info-col">
+                    <div className="quest-header-row">
+                      <h3 className="quest-title">{c.name || c.title}</h3>
+                    </div>
+
+                    {c.subject && (
+                      <span className="subject-badge-tag">{c.subject}</span>
+                    )}
+
+                    <p className="quest-desc">{c.description}</p>
+
+                    <div className="quest-progress-block">
+                      <div className="quest-progress-header">
+                        <span>Progress</span>
+                        <strong>{formatProgressDisplay(c)}</strong>
+                      </div>
+                      <div className="quest-progress-bar-bg">
+                        <div
+                          className="quest-progress-bar-fill"
+                          style={{
+                            width: `${Math.min(c.progress_percentage || 0, 100)}%`,
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="quest-footer">
+                      <span className="reward-tag">+{c.reward_xp} XP</span>
+                      <span className="quest-status text-pending">In Progress</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        </section>
       )}
 
-      {/* Badges Grid */}
-      {activeTab === "badges" && (
-        <div className="badges-grid-layout">
-          {badges.length === 0 ? (
-            <div className="empty-state-card mini">
-              <p>No badges unlocked yet. Keep attending classes!</p>
-            </div>
-          ) : (
-            badges.map((b) => (
-              <div
-                key={b.id}
-                className={`badge-item-card ${b.earned ? "badge-unlocked" : "badge-locked"}`}
-              >
-                <div className="badge-icon-bubble">
-                  {b.earned ? "🏆" : "🔒"}
-                </div>
-                <h4 className="badge-name">{b.name}</h4>
-                <p className="badge-desc">{b.description}</p>
-                <span className="badge-xp-reward">+{b.xp_reward} XP</span>
+      {/* Completed Challenges */}
+      {activeTab === "completed" && (
+        <section>
+          <div className="challenges-section-title">Completed Challenges</div>
+          <div className="quest-items-list">
+            {(!completed || completed.length === 0) ? (
+              <div className="empty-state-card mini">
+                <p>No challenges completed yet. Sync your attendance to start unlocking rewards!</p>
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              completed.map((c) => (
+                <div key={c.id} className="quest-card quest-completed">
+                  <div className="quest-icon-col">✅</div>
+                  <div className="quest-info-col">
+                    <div className="quest-header-row">
+                      <h3 className="quest-title">{c.name || c.title}</h3>
+                    </div>
+
+                    {c.subject && (
+                      <span className="subject-badge-tag">{c.subject}</span>
+                    )}
+
+                    <p className="quest-desc">{c.description}</p>
+
+                    <div className="quest-progress-block">
+                      <div className="quest-progress-bar-bg">
+                        <div
+                          className="quest-progress-bar-fill fill-completed"
+                          style={{ width: "100%" }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="quest-footer">
+                      <span className="completed-reward-tag">+{c.reward_xp} XP earned</span>
+                      <span className="quest-status text-safe">✓ Completed</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Badges / Achievements */}
+      {activeTab === "badges" && (
+        <section>
+          <div className="challenges-section-title">Achievements</div>
+          <div className="badges-grid-layout">
+            {badges.length === 0 ? (
+              <div className="empty-state-card mini">
+                <p>No badges unlocked yet. Keep attending classes!</p>
+              </div>
+            ) : (
+              badges.map((b) => (
+                <div
+                  key={b.id}
+                  className={`badge-item-card ${b.earned ? "badge-unlocked" : "badge-locked"}`}
+                >
+                  <div className="badge-icon-bubble">
+                    {b.earned ? "🏆" : "🔒"}
+                  </div>
+                  <h4 className="badge-name">{b.name}</h4>
+                  <p className="badge-desc">{b.description}</p>
+                  <span className="badge-xp-reward">+{b.xp_reward} XP</span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       )}
 
       <BottomNav />
