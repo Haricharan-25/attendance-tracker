@@ -39,6 +39,34 @@ function Dashboard() {
     fetchDashboard();
   }, [navigate]);
 
+  const handleOneClickSync = async () => {
+    const savedPassword = localStorage.getItem("gems_password");
+    if (!savedPassword) {
+      setSyncModalOpen(true);
+      return;
+    }
+
+    setSyncing(true);
+    setSyncMessage("Syncing with GEMS...");
+
+    try {
+      const res = await api.post("/sync/", { password: savedPassword });
+      setSyncMessage(res.data.message || "Attendance updated!");
+      fetchDashboard();
+      setTimeout(() => setSyncMessage(""), 3000);
+    } catch (err) {
+      const errMsg = err.response?.data?.message || "Failed to sync. Please verify password.";
+      setSyncMessage(errMsg);
+      // If unauthorized or invalid password, open modal to let them update
+      if (err.response?.status === 400 || err.response?.status === 500) {
+        setSyncModalOpen(true);
+      }
+      setTimeout(() => setSyncMessage(""), 4000);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSyncSubmit = async (e) => {
     e.preventDefault();
     if (!gemsPassword) return;
@@ -48,6 +76,7 @@ function Dashboard() {
 
     try {
       const res = await api.post("/sync/", { password: gemsPassword });
+      localStorage.setItem("gems_password", gemsPassword);
       setSyncMessage(res.data.message || "Attendance updated!");
       setGemsPassword("");
       setTimeout(() => {
@@ -70,9 +99,18 @@ function Dashboard() {
     navigate("/");
   };
 
+  const [showModalPassword, setShowModalPassword] = useState(false);
+
   if (error && !dashboard) {
     return (
       <div className="mobile-page-container">
+        {syncMessage && (
+          <div className={`sync-toast ${syncMessage.includes("updated") || syncMessage.includes("success") ? "success" : syncMessage.includes("Syncing") ? "" : "error"}`}>
+            {syncing && <span className="spinner-sm"></span>}
+            <span>{syncMessage}</span>
+          </div>
+        )}
+
         <header className="mobile-top-header">
           <div className="portal-badge">Attendance Tracker</div>
           <button className="icon-action-btn" onClick={handleLogout} title="Logout">
@@ -86,9 +124,10 @@ function Dashboard() {
           <p>{error}</p>
           <button
             className="primary-btn sync-action-btn"
-            onClick={() => setSyncModalOpen(true)}
+            onClick={handleOneClickSync}
+            disabled={syncing}
           >
-            ⚡ Sync Attendance Now
+            {syncing ? "⚡ Syncing..." : "⚡ Sync Attendance Now"}
           </button>
         </div>
 
@@ -96,15 +135,37 @@ function Dashboard() {
           <div className="modal-backdrop">
             <div className="modal-sheet">
               <h3>Sync GEMS Attendance</h3>
-              <p>Enter your GEMS password to fetch your latest attendance directly from the portal.</p>
+              <p>Enter your GEMS password to fetch your latest attendance directly from the portal. It will be remembered for 1-click syncs.</p>
               <form onSubmit={handleSyncSubmit}>
-                <input
-                  type="password"
-                  placeholder="GEMS Password"
-                  value={gemsPassword}
-                  onChange={(e) => setGemsPassword(e.target.value)}
-                  required
-                />
+                <div className="form-group">
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showModalPassword ? "text" : "password"}
+                      placeholder="GEMS Password"
+                      value={gemsPassword}
+                      onChange={(e) => setGemsPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowModalPassword(!showModalPassword)}
+                      title={showModalPassword ? "Hide password" : "Show password"}
+                    >
+                      {showModalPassword ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
                 {syncMessage && <p className="sync-status-msg">{syncMessage}</p>}
                 <div className="modal-actions">
                   <button
@@ -143,6 +204,14 @@ function Dashboard() {
 
   return (
     <div className="mobile-page-container">
+      {/* Toast Notification */}
+      {syncMessage && (
+        <div className={`sync-toast ${syncMessage.includes("updated") || syncMessage.includes("success") ? "success" : syncMessage.includes("Syncing") ? "" : "error"}`}>
+          {syncing && <span className="spinner-sm"></span>}
+          <span>{syncMessage}</span>
+        </div>
+      )}
+
       {/* Top Header */}
       <header className="mobile-top-header">
         <div>
@@ -152,9 +221,11 @@ function Dashboard() {
         <div className="header-actions">
           <button
             className="ghost-btn sync-pill-btn"
-            onClick={() => setSyncModalOpen(true)}
+            onClick={handleOneClickSync}
+            disabled={syncing}
+            title="1-Click Sync Attendance"
           >
-            ↻ Sync GEMS
+            {syncing ? "↻ Syncing..." : "↻ 1-Click Sync"}
           </button>
           <button
             className="icon-action-btn"
@@ -283,20 +354,40 @@ function Dashboard() {
           <div className="modal-sheet">
             <h3>Sync GEMS Attendance</h3>
             <p className="modal-desc">
-              Enter your GEMS password to fetch live attendance from the portal. Credentials are used only for this request.
+              Enter your GEMS password to fetch live attendance from the portal. It will be stored securely on your device for future 1-click syncs.
             </p>
             <form onSubmit={handleSyncSubmit}>
               <div className="form-group">
-                <input
-                  type="password"
-                  placeholder="Enter GEMS password"
-                  value={gemsPassword}
-                  onChange={(e) => setGemsPassword(e.target.value)}
-                  required
-                />
+                <div className="password-input-wrapper">
+                  <input
+                    type={showModalPassword ? "text" : "password"}
+                    placeholder="Enter GEMS password"
+                    value={gemsPassword}
+                    onChange={(e) => setGemsPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowModalPassword(!showModalPassword)}
+                    title={showModalPassword ? "Hide password" : "Show password"}
+                  >
+                    {showModalPassword ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                      </svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
               {syncMessage && (
-                <div className={`alert-message ${syncMessage.includes("success") ? "success" : "error"}`}>
+                <div className={`alert-message ${syncMessage.includes("success") || syncMessage.includes("updated") ? "success" : "error"}`}>
                   {syncMessage}
                 </div>
               )}

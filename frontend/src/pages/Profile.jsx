@@ -11,6 +11,11 @@ function Profile() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [savedGemsPass, setSavedGemsPass] = useState(
+    () => localStorage.getItem("gems_password") || ""
+  );
+  const [showGemsPass, setShowGemsPass] = useState(false);
+  const [gemsSavedMsg, setGemsSavedMsg] = useState("");
 
   const navigate = useNavigate();
 
@@ -165,6 +170,65 @@ function Profile() {
 
           <button type="submit" className="primary-btn" disabled={saving}>
             {saving ? "Saving Changes..." : "Save Preferences"}
+          </button>
+        </form>
+      </div>
+
+      {/* GEMS Integration & One-Click Sync Settings */}
+      <div className="profile-settings-card">
+        <h3>GEMS Credentials</h3>
+        <p className="settings-desc">
+          Used automatically for 1-click attendance syncing without prompting you every time.
+        </p>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            localStorage.setItem("gems_password", savedGemsPass);
+            setGemsSavedMsg("GEMS password saved for 1-click sync!");
+            setTimeout(() => setGemsSavedMsg(""), 3000);
+          }}
+          className="profile-form"
+        >
+          <div className="form-group">
+            <label htmlFor="gems_pass_field">GEMS Password</label>
+            <div className="password-input-wrapper">
+              <input
+                id="gems_pass_field"
+                type={showGemsPass ? "text" : "password"}
+                placeholder="Enter GEMS password"
+                value={savedGemsPass}
+                onChange={(e) => setSavedGemsPass(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowGemsPass(!showGemsPass)}
+                title={showGemsPass ? "Hide password" : "Show password"}
+              >
+                {showGemsPass ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+            <small className="field-hint">
+              Stored securely on this device to enable fast 1-click sync.
+            </small>
+          </div>
+
+          {gemsSavedMsg && <div className="alert-message success">{gemsSavedMsg}</div>}
+
+          <button type="submit" className="primary-btn">
+            Save GEMS Password
           </button>
         </form>
       </div>

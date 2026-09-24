@@ -9,16 +9,12 @@ function Attendance() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
 
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      navigate("/");
-      return;
-    }
-
+  const loadData = () => {
     api
       .get("/dashboard/")
       .then((res) => {
@@ -30,7 +26,39 @@ function Attendance() {
         setError("Failed to load attendance records.");
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      navigate("/");
+      return;
+    }
+    loadData();
   }, [navigate]);
+
+  const handleOneClickSync = async () => {
+    const savedPassword = localStorage.getItem("gems_password");
+    if (!savedPassword) {
+      navigate("/dashboard");
+      return;
+    }
+
+    setSyncing(true);
+    setSyncMessage("Syncing with GEMS...");
+
+    try {
+      const res = await api.post("/sync/", { password: savedPassword });
+      setSyncMessage(res.data.message || "Attendance updated!");
+      loadData();
+      setTimeout(() => setSyncMessage(""), 3000);
+    } catch (err) {
+      setSyncMessage(err.response?.data?.message || "Failed to sync. Check credentials.");
+      setTimeout(() => setSyncMessage(""), 4000);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -54,12 +82,30 @@ function Attendance() {
 
   return (
     <div className="mobile-page-container">
+      {/* Toast Notification */}
+      {syncMessage && (
+        <div className={`sync-toast ${syncMessage.includes("updated") || syncMessage.includes("success") ? "success" : syncMessage.includes("Syncing") ? "" : "error"}`}>
+          {syncing && <span className="spinner-sm"></span>}
+          <span>{syncMessage}</span>
+        </div>
+      )}
+
       <header className="mobile-top-header">
         <div>
           <h1 className="user-title">Attendance Details</h1>
           <span className="sub-heading">
             {subjects.length} Total Registered Subjects
           </span>
+        </div>
+        <div className="header-actions">
+          <button
+            className="ghost-btn sync-pill-btn"
+            onClick={handleOneClickSync}
+            disabled={syncing}
+            title="1-Click Sync Attendance"
+          >
+            {syncing ? "↻ Syncing..." : "↻ 1-Click Sync"}
+          </button>
         </div>
       </header>
 
