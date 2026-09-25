@@ -11,6 +11,7 @@ function Dashboard() {
   const [gemsPassword, setGemsPassword] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [syncTrigger, setSyncTrigger] = useState(0);
 
   const navigate = useNavigate();
 
@@ -54,6 +55,7 @@ function Dashboard() {
       const res = await api.post("/sync/", { password: savedPassword });
       setSyncMessage(res.data.message || "Attendance updated!");
       fetchDashboard();
+      setSyncTrigger((prev) => prev + 1);
       setTimeout(() => setSyncMessage(""), 3000);
     } catch (err) {
       const errMsg = err.response?.data?.message || "Failed to sync. Please verify password.";
@@ -84,6 +86,7 @@ function Dashboard() {
         setSyncModalOpen(false);
         setSyncMessage("");
         fetchDashboard();
+        setSyncTrigger((prev) => prev + 1);
       }, 1500);
     } catch (err) {
       setSyncMessage(
@@ -97,6 +100,7 @@ function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
+    localStorage.removeItem("gems_password");
     navigate("/");
   };
 
@@ -290,7 +294,10 @@ function Dashboard() {
       </section>
 
       {/* Attendance Planner Simulator */}
-      <AttendancePlanner />
+      <AttendancePlanner
+        syncTrigger={syncTrigger}
+        onSyncRequest={handleOneClickSync}
+      />
 
       {/* Sync Modal */}
       {syncModalOpen && (

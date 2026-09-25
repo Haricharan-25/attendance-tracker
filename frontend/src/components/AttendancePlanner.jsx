@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../services/api";
 
-function AttendancePlanner() {
+function AttendancePlanner({ syncTrigger = 0, onSyncRequest }) {
   const [plannerData, setPlannerData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -47,7 +47,7 @@ function AttendancePlanner() {
 
   useEffect(() => {
     fetchPlannerData();
-  }, []);
+  }, [syncTrigger]);
 
   // Today reference
   const today = plannerData?.today ? new Date(plannerData.today + "T00:00:00") : new Date();
@@ -213,6 +213,8 @@ function AttendancePlanner() {
     );
   }
 
+  const hasTimetable = plannerData?.timetable && Object.keys(plannerData.timetable).length > 0;
+
   if (error && !plannerData) {
     return (
       <div className="planner-card empty-state">
@@ -248,6 +250,14 @@ function AttendancePlanner() {
           {leaveMode ? "← Simulator Mode" : "✈ Plan Leave"}
         </button>
       </div>
+
+      {!hasTimetable && (
+        <div className="leave-mode-banner" style={{ background: "rgba(59, 130, 246, 0.12)", borderColor: "rgba(59, 130, 246, 0.4)", color: "#93c5fd" }}>
+          <span>
+            ℹ No timetable found for this student account yet. Click <strong>Sync</strong> above to fetch your timetable and attendance records from GEMS.
+          </span>
+        </div>
+      )}
 
       {/* Month Navigation: Current month & Next month only */}
       <div className="calendar-month-bar">
