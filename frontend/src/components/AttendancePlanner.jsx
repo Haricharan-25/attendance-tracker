@@ -252,10 +252,20 @@ function AttendancePlanner({ syncTrigger = 0, onSyncRequest }) {
       </div>
 
       {!hasTimetable && (
-        <div className="leave-mode-banner" style={{ background: "rgba(59, 130, 246, 0.12)", borderColor: "rgba(59, 130, 246, 0.4)", color: "#93c5fd" }}>
+        <div className="leave-mode-banner" style={{ background: "rgba(59, 130, 246, 0.12)", borderColor: "rgba(59, 130, 246, 0.4)", color: "#93c5fd", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
           <span>
-            ℹ No timetable found for this student account yet. Click <strong>Sync</strong> above to fetch your timetable and attendance records from GEMS.
+            ℹ No timetable found for this student account yet. Click Sync to fetch your timetable and attendance records from GEMS.
           </span>
+          {onSyncRequest && (
+            <button
+              type="button"
+              className="sync-pill-btn"
+              onClick={onSyncRequest}
+              style={{ flexShrink: 0, padding: "5px 12px", fontSize: "11px" }}
+            >
+              ↻ Sync Timetable
+            </button>
+          )}
         </div>
       )}
 
@@ -358,7 +368,18 @@ function AttendancePlanner({ syncTrigger = 0, onSyncRequest }) {
 
           {selectedDateClasses.length === 0 ? (
             <div className="empty-classes-msg">
-              <span>No classes scheduled for this date.</span>
+              {!hasTimetable ? (
+                <div>
+                  <p style={{ marginBottom: "6px", color: "#93c5fd", fontWeight: "600" }}>
+                    Timetable not synced yet for this account.
+                  </p>
+                  <p style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+                    Click <strong>Sync Timetable</strong> above to load your classes from GEMS.
+                  </p>
+                </div>
+              ) : (
+                <span>No classes scheduled for this date.</span>
+              )}
             </div>
           ) : (
             <div className="scheduled-classes-list">
