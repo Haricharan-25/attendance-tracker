@@ -7,8 +7,12 @@ django.setup()
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
-if not User.objects.filter(username="admin").exists():
-    User.objects.create_superuser("admin", "admin@example.com", "Fveub6tJzKU085Z8")
-    print("Admin account created.")
-else:
-    print("Admin account already exists.")
+admin_user, created = User.objects.get_or_create(
+    username="admin",
+    defaults={"email": "admin@example.com", "is_staff": True, "is_superuser": True}
+)
+admin_user.set_password("Admin@1234")
+admin_user.is_staff = True
+admin_user.is_superuser = True
+admin_user.save()
+print("Admin superuser password synchronized to Admin@1234")
