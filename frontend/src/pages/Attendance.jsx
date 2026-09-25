@@ -102,9 +102,9 @@ function Attendance() {
             className="ghost-btn sync-pill-btn"
             onClick={handleOneClickSync}
             disabled={syncing}
-            title="1-Click Sync Attendance"
+            title="Sync Attendance"
           >
-            {syncing ? "↻ Syncing..." : "↻ 1-Click Sync"}
+            {syncing ? "↻ Syncing..." : "↻ Sync"}
           </button>
         </div>
       </header>

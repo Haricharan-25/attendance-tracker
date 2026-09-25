@@ -1,6 +1,9 @@
 from django.contrib.auth.models import User
 
-from attendance.services.mongodb_service import get_cached_attendance
+from attendance.services.mongodb_service import (
+    get_cached_attendance,
+    get_cached_timetable,
+)
 
 from rest_framework import status
 from rest_framework.views import APIView
@@ -679,4 +682,316 @@ class SyncAttendanceView(APIView):
                 {"message": "Failed to sync attendance from GEMS."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+# ==========================================================
+# ATTENDANCE PLANNER
+# ==========================================================
+
+class AttendancePlannerView(APIView):
+    """
+    Returns authenticated student's:
+    - current real attendance & overall stats
+    - cached timetable
+    - next 7 days preview projection (assuming student attends scheduled classes)
+    Guarantees user isolation: request.user.username is always used.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import date, timedelta
+
+        roll_number = request.user.username
+
+        # 1. Real attendance from MongoDB
+        data = get_cached_attendance(roll_number)
+        raw_attendance = data.get("attendance", []) if data else []
+
+        total_attended = 0
+        total_classes = 0
+        attendance_by_subject = {}
+
+        for item in raw_attendance:
+            subj = item.get("subject", "").strip()
+            att = int(item.get("attended", 0))
+            tot = int(item.get("total", 0))
+            perc = round((att / tot) * 100, 2) if tot > 0 else 0.0
+
+            total_attended += att
+            total_classes += tot
+            attendance_by_subject[subj] = {
+                "subject": subj,
+                "attended": att,
+                "total": tot,
+                "percentage": perc,
+            }
+
+        overall_perc = round((total_attended / total_classes) * 100, 2) if total_classes > 0 else 0.0
+
+        # 2. Student's timetable
+        tt_doc = get_cached_timetable(roll_number)
+        timetable = tt_doc.get("timetable", {}) if tt_doc else {}
+
+        # 3. Next 7 days preview
+        # Project attendance for the next 7 calendar days starting from tomorrow
+        # (or today if classes remain, standard convention: next 7 consecutive days starting from tomorrow)
+        # Assuming student attends all scheduled classes on each date
+        today = date.today()
+        day_names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+        next_7_days = []
+        running_attended = total_attended
+        running_total = total_classes
+
+        for i in range(1, 8):
+            target_date = today + timedelta(days=i)
+            day_name = day_names[target_date.weekday()]
+            scheduled_classes = timetable.get(day_name, [])
+            class_count = len(scheduled_classes)
+
+            # If student attends scheduled classes on this date:
+            projected_attended = running_attended + class_count
+            projected_total = running_total + class_count
+            projected_perc = (
+                round((projected_attended / projected_total) * 100, 2)
+                if projected_total > 0
+                else 0.0
+            )
+
+            next_7_days.append({
+                "date": target_date.isoformat(),
+                "day_of_week": day_name,
+                "class_count": class_count,
+                "scheduled_subjects": scheduled_classes,
+                "projected_percentage": projected_perc,
+                "no_classes": class_count == 0,
+            })
+
+            # Advance running baseline so each subsequent day in the preview builds on attending previous days
+            running_attended = projected_attended
+            running_total = projected_total
+
+        return Response(
+            {
+                "roll_number": roll_number,
+                "overall": {
+                    "attended": total_attended,
+                    "total": total_classes,
+                    "percentage": overall_perc,
+                },
+                "subjects": list(attendance_by_subject.values()),
+                "timetable": timetable,
+                "next_7_days": next_7_days,
+                "today": today.isoformat(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AttendancePlannerCalculateView(APIView):
+    """
+    Performs pure WHAT-IF simulation calculation.
+    NEVER writes to database or modifies real attendance.
+    Strictly uses request.user for student isolation.
+    Supports:
+    1. 'simulation' mode: selections dictionary { "YYYY-MM-DD": [ {"subject": "...", "status": "present"|"absent"}, ... ] }
+    2. 'leave' mode: leave_dates list of date strings [ "YYYY-MM-DD", ... ]
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from datetime import datetime, date
+
+        roll_number = request.user.username
+
+        # 1. Fetch current real baseline from MongoDB
+        data = get_cached_attendance(roll_number)
+        raw_attendance = data.get("attendance", []) if data else []
+
+        subject_map = {}
+        curr_total_attended = 0
+        curr_total_conducted = 0
+
+        for item in raw_attendance:
+            subj = item.get("subject", "").strip()
+            att = int(item.get("attended", 0))
+            tot = int(item.get("total", 0))
+            curr_total_attended += att
+            curr_total_conducted += tot
+            subject_map[subj] = {
+                "subject": subj,
+                "current_attended": att,
+                "current_total": tot,
+                "simulated_present": 0,
+                "simulated_absent": 0,
+            }
+
+        curr_overall_perc = (
+            round((curr_total_attended / curr_total_conducted) * 100, 2)
+            if curr_total_conducted > 0
+            else 0.0
+        )
+
+        mode = request.data.get("mode", "simulation")  # 'simulation' or 'leave'
+
+        # Fetch timetable for student
+        tt_doc = get_cached_timetable(roll_number)
+        timetable = tt_doc.get("timetable", {}) if tt_doc else {}
+        day_names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+        total_simulated_present = 0
+        total_simulated_absent = 0
+
+        if mode == "leave":
+            # Leave mode: list of selected date strings
+            leave_dates = request.data.get("leave_dates", [])
+            valid_leave_days_count = 0
+            classes_missed = 0
+            breakdown_by_date = []
+
+            for d_str in set(leave_dates):
+                try:
+                    dt = datetime.strptime(d_str, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+
+                day_abbr = day_names[dt.weekday()]
+                classes_on_day = timetable.get(day_abbr, [])
+
+                if classes_on_day:
+                    valid_leave_days_count += 1
+                    for subj in classes_on_day:
+                        classes_missed += 1
+                        total_simulated_absent += 1
+                        if subj in subject_map:
+                            subject_map[subj]["simulated_absent"] += 1
+                        else:
+                            subject_map[subj] = {
+                                "subject": subj,
+                                "current_attended": 0,
+                                "current_total": 0,
+                                "simulated_present": 0,
+                                "simulated_absent": 1,
+                            }
+                    breakdown_by_date.append({
+                        "date": d_str,
+                        "day": day_abbr,
+                        "classes_missed": len(classes_on_day),
+                        "subjects": classes_on_day,
+                    })
+
+            new_attended = curr_total_attended
+            new_total = curr_total_conducted + classes_missed
+            projected_perc = (
+                round((new_attended / new_total) * 100, 2)
+                if new_total > 0
+                else 0.0
+            )
+            change = round(projected_perc - curr_overall_perc, 2)
+
+            return Response({
+                "mode": "leave",
+                "current_attendance": curr_overall_perc,
+                "projected_attendance": projected_perc,
+                "change": change,
+                "selected_leave_days": len(set(leave_dates)),
+                "effective_leave_days": valid_leave_days_count,
+                "classes_missed": classes_missed,
+                "current_attended": curr_total_attended,
+                "current_total": curr_total_conducted,
+                "final_attended": new_attended,
+                "final_total": new_total,
+                "breakdown": breakdown_by_date,
+            }, status=status.HTTP_200_OK)
+
+        else:
+            # Multi-date simulation mode:
+            # selections = { "YYYY-MM-DD": [ {"subject": "DBMS", "choice": "present"|"absent"}, ... ] }
+            selections = request.data.get("selections", {})
+
+            for d_str, class_choices in selections.items():
+                if not isinstance(class_choices, list):
+                    continue
+                for c in class_choices:
+                    subj = c.get("subject", "").strip()
+                    choice = c.get("choice", "").lower().strip()
+                    if not subj or choice not in ["present", "absent"]:
+                        continue
+
+                    if choice == "present":
+                        total_simulated_present += 1
+                        if subj in subject_map:
+                            subject_map[subj]["simulated_present"] += 1
+                        else:
+                            subject_map[subj] = {
+                                "subject": subj,
+                                "current_attended": 0,
+                                "current_total": 0,
+                                "simulated_present": 1,
+                                "simulated_absent": 0,
+                            }
+                    elif choice == "absent":
+                        total_simulated_absent += 1
+                        if subj in subject_map:
+                            subject_map[subj]["simulated_absent"] += 1
+                        else:
+                            subject_map[subj] = {
+                                "subject": subj,
+                                "current_attended": 0,
+                                "current_total": 0,
+                                "simulated_present": 0,
+                                "simulated_absent": 1,
+                            }
+
+            final_attended = curr_total_attended + total_simulated_present
+            final_total = curr_total_conducted + total_simulated_present + total_simulated_absent
+            projected_perc = (
+                round((final_attended / final_total) * 100, 2)
+                if final_total > 0
+                else 0.0
+            )
+            # Ensure cap between 0 and 100
+            projected_perc = max(0.0, min(100.0, projected_perc))
+            change = round(projected_perc - curr_overall_perc, 2)
+
+            # Build subject breakdown
+            subjects_result = []
+            for s_name, s_data in subject_map.items():
+                s_new_att = s_data["current_attended"] + s_data["simulated_present"]
+                s_new_tot = s_data["current_total"] + s_data["simulated_present"] + s_data["simulated_absent"]
+                s_curr_perc = (
+                    round((s_data["current_attended"] / s_data["current_total"]) * 100, 2)
+                    if s_data["current_total"] > 0
+                    else 0.0
+                )
+                s_new_perc = (
+                    round((s_new_att / s_new_tot) * 100, 2)
+                    if s_new_tot > 0
+                    else 0.0
+                )
+                subjects_result.append({
+                    "subject": s_name,
+                    "current_attended": s_data["current_attended"],
+                    "current_total": s_data["current_total"],
+                    "current_percentage": s_curr_perc,
+                    "simulated_present": s_data["simulated_present"],
+                    "simulated_absent": s_data["simulated_absent"],
+                    "projected_attended": s_new_att,
+                    "projected_total": s_new_tot,
+                    "projected_percentage": max(0.0, min(100.0, s_new_perc)),
+                })
+
+            return Response({
+                "mode": "simulation",
+                "current_attendance": curr_overall_perc,
+                "projected_attendance": projected_perc,
+                "change": change,
+                "current_attended": curr_total_attended,
+                "current_total": curr_total_conducted,
+                "simulated_present": total_simulated_present,
+                "simulated_absent": total_simulated_absent,
+                "final_attended": final_attended,
+                "final_total": final_total,
+                "subjects": subjects_result,
+            }, status=status.HTTP_200_OK)
 

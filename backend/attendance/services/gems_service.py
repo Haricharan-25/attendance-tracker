@@ -1,4 +1,5 @@
 import os
+import re
 
 from dotenv import load_dotenv
 from playwright.async_api import (
@@ -6,7 +7,7 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from attendance.services.mongodb_service import save_attendance
+from attendance.services.mongodb_service import save_attendance, save_timetable
 
 load_dotenv()
 
@@ -155,6 +156,47 @@ async def get_gems_attendance(username=None, password=None):
                 raise GemsAttendanceError(
                     "GEMS login could not be confirmed."
                 )
+
+            # ==================================================
+            # SCRAPE TIMETABLE (IF AVAILABLE)
+            # ==================================================
+            try:
+                tt_links = page.get_by_text("Time Table", exact=True)
+                tt_count = await tt_links.count()
+                for t_idx in range(tt_count):
+                    el = tt_links.nth(t_idx)
+                    if await el.is_visible():
+                        print("Clicking Time Table for student timetable...")
+                        await el.click()
+                        await page.wait_for_timeout(2500)
+                        content = await page.content()
+                        rows = re.findall(r'<tr[^>]*x-grid-row[^>]*>(.*?)</tr>', content, re.DOTALL)
+                        timetable_map = {}
+                        for r in rows:
+                            cells = re.findall(r'<td[^>]*>(.*?)</td>', r, re.DOTALL)
+                            if not cells:
+                                continue
+                            day_txt = re.sub(r'<[^>]+>', ' ', cells[0]).strip().upper()
+                            if day_txt in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']:
+                                day_classes = []
+                                for c in cells[1:]:
+                                    spans = re.findall(r'<span[^>]*>(.*?)</span>', c)
+                                    clean_spans = [
+                                        re.sub(r'<[^>]+>', '', s).strip()
+                                        for s in spans
+                                        if re.sub(r'<[^>]+>', '', s).strip() and s.strip() != '&nbsp;'
+                                    ]
+                                    if clean_spans:
+                                        subj = clean_spans[0]
+                                        if subj and subj != '&nbsp;':
+                                            day_classes.append(subj)
+                                timetable_map[day_txt] = day_classes
+                        if timetable_map:
+                            save_timetable(username, timetable_map)
+                            print(f"Timetable saved for {username}: {len(timetable_map)} days found.")
+                        break
+            except Exception as tt_err:
+                print("Notice: Timetable scraping skipped or encountered non-fatal error:", tt_err)
 
             # ==================================================
             # FIND ATTENDANCE

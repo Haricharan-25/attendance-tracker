@@ -9,6 +9,8 @@ from .views import (
     ChallengesView,
     BadgesView,
     SyncAttendanceView,
+    AttendancePlannerView,
+    AttendancePlannerCalculateView,
 )
 
 
@@ -21,4 +23,6 @@ urlpatterns = [
     path("challenges/", ChallengesView.as_view()),
     path("badges/", BadgesView.as_view()),
     path("sync/", SyncAttendanceView.as_view()),
-]
+    path("attendance-planner/", AttendancePlannerView.as_view()),
+    path("attendance-planner/calculate/", AttendancePlannerCalculateView.as_view()),
+]

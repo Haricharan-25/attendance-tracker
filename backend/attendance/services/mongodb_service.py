@@ -98,6 +98,44 @@ def get_cached_attendance(username):
 
 
 # ==========================================================
+# TIMETABLE CACHE
+# ==========================================================
+
+timetable_collection = db["timetable_cache"]
+
+
+def save_timetable(username, timetable):
+    timetable_collection.update_one(
+        {
+            "username": username
+        },
+        {
+            "$set": {
+                "username": username,
+                "timetable": timetable,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+        upsert=True,
+    )
+
+
+def get_cached_timetable(username):
+    document = timetable_collection.find_one(
+        {
+            "username": {
+                "$regex": f"^{username}$",
+                "$options": "i"
+            }
+        },
+        {
+            "_id": 0
+        }
+    )
+    return document
+
+
+# ==========================================================
 # DELETE CACHED ATTENDANCE
 # ==========================================================
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import BottomNav from "../components/BottomNav";
+import AttendancePlanner from "../components/AttendancePlanner";
 
 function Dashboard() {
   const [dashboard, setDashboard] = useState(null);
@@ -223,9 +224,9 @@ function Dashboard() {
             className="ghost-btn sync-pill-btn"
             onClick={handleOneClickSync}
             disabled={syncing}
-            title="1-Click Sync Attendance"
+            title="Sync Attendance"
           >
-            {syncing ? "↻ Syncing..." : "↻ 1-Click Sync"}
+            {syncing ? "↻ Syncing..." : "↻ Sync"}
           </button>
           <button
             className="icon-action-btn"
@@ -288,65 +289,8 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* Subject Summary List */}
-      <section className="dashboard-section">
-        <div className="section-header-row">
-          <h2>Subject Breakdown</h2>
-          <button
-            className="text-action-link"
-            onClick={() => navigate("/attendance")}
-          >
-            View All ({dashboard.attendance?.length || 0}) →
-          </button>
-        </div>
-
-        <div className="subject-cards-list">
-          {dashboard.attendance?.slice(0, 4).map((sub) => {
-            const subStatusClass = (sub.status || "safe").toLowerCase();
-            return (
-              <div className="mobile-subject-card" key={sub.sno || sub.subject}>
-                <div className="subject-card-head">
-                  <div className="subject-title-box">
-                    <span className="subject-code">{sub.subject}</span>
-                    <span className="classes-ratio">
-                      {sub.attended}/{sub.total} classes
-                    </span>
-                  </div>
-                  <div className="subject-perc-box">
-                    <span className={`perc-tag perc-${subStatusClass}`}>
-                      {sub.percentage}%
-                    </span>
-                  </div>
-                </div>
-
-                <div className="progress-bar-sm">
-                  <div
-                    className={`progress-fill fill-${subStatusClass}`}
-                    style={{ width: `${Math.min(sub.percentage, 100)}%` }}
-                  />
-                </div>
-
-                <div className="subject-card-footer">
-                  <span className={`status-text text-${subStatusClass}`}>
-                    {sub.status}
-                  </span>
-                  {sub.classes_needed_for_75 > 0 ? (
-                    <span className="target-chip alert-chip">
-                      Need {sub.classes_needed_for_75} classes
-                    </span>
-                  ) : sub.classes_can_miss > 0 ? (
-                    <span className="target-chip safe-chip">
-                      Can miss {sub.classes_can_miss} classes
-                    </span>
-                  ) : (
-                    <span className="target-chip on-track-chip">On track</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {/* Attendance Planner Simulator */}
+      <AttendancePlanner />
 
       {/* Sync Modal */}
       {syncModalOpen && (
