@@ -18,9 +18,9 @@ class GemsAttendanceError(Exception):
     pass
 
 
-async def get_gems_attendance(username=None, password=None):
+async def get_gems_attendance(username=None, password=None, return_timetable=False):
     """
-    Login to GEMS and return the latest attendance.
+    Login to GEMS and return the latest attendance (and optionally timetable).
 
     Returns:
         [
@@ -158,48 +158,97 @@ async def get_gems_attendance(username=None, password=None):
                 )
 
             # ==================================================
-            # SCRAPE TIMETABLE (IF AVAILABLE)
+            # 1. SCRAPE TIMETABLE (DASHBOARD TOOLBAR)
             # ==================================================
+            timetable_map = {}
             try:
-                tt_links = page.get_by_text("Time Table", exact=True)
-                tt_count = await tt_links.count()
-                for t_idx in range(tt_count):
-                    el = tt_links.nth(t_idx)
-                    if await el.is_visible():
-                        print("Clicking Time Table for student timetable...")
-                        await el.click()
-                        await page.wait_for_timeout(2500)
-                        content = await page.content()
-                        rows = re.findall(r'<tr[^>]*x-grid-row[^>]*>(.*?)</tr>', content, re.DOTALL)
-                        timetable_map = {}
-                        for r in rows:
-                            cells = re.findall(r'<td[^>]*>(.*?)</td>', r, re.DOTALL)
-                            if not cells:
+                print()
+                print("Looking for Time Table on dashboard toolbar...")
+                tt_clicked = False
+                for attempt in range(1, 7):
+                    print(f"Time Table click attempt {attempt}/6...")
+                    try:
+                        # Priority 1: Direct button locator (#tmeTable is the GEMS button ID)
+                        tt_btn = page.locator("#tmeTable button, #tmeTable")
+                        if await tt_btn.count() > 0 and await tt_btn.first.is_visible():
+                            await tt_btn.first.click()
+                            tt_clicked = True
+                            print("Clicked #tmeTable button.")
+                            break
+
+                        # Priority 2: ExtJS component click
+                        clicked = await page.evaluate("""() => {
+                            if (window.Ext && Ext.getCmp && Ext.getCmp('tmeTable')) {
+                                const cmp = Ext.getCmp('tmeTable');
+                                if (cmp.btnEl && cmp.btnEl.dom) {
+                                    cmp.btnEl.dom.click();
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }""")
+                        if clicked:
+                            tt_clicked = True
+                            print("Clicked tmeTable via ExtJS component.")
+                            break
+
+                        # Priority 3: Visible text link
+                        text_links = page.get_by_text("Time Table", exact=True)
+                        for t_idx in range(await text_links.count()):
+                            el = text_links.nth(t_idx)
+                            if await el.is_visible():
+                                await el.click()
+                                tt_clicked = True
+                                print("Clicked Time Table text link.")
+                                break
+                        if tt_clicked:
+                            break
+                    except Exception as e:
+                        print(f"Time Table click attempt {attempt} error: {e}")
+
+                    await page.wait_for_timeout(1500)
+
+                if tt_clicked:
+                    print("Waiting for timetable grid rows...")
+                    await page.wait_for_timeout(2500)
+                    content = await page.content()
+                    rows = re.findall(r'<tr\s+class="x-grid-row[^"]*">(.*?)</tr>', content, re.DOTALL)
+                    print(f"Found {len(rows)} timetable rows.")
+
+                    for row_html in rows:
+                        cells = re.findall(r'<td\s+class="[^"]*x-grid-cell[^"]*">(.*?)</td>', row_html, re.DOTALL)
+                        if not cells:
+                            continue
+                        day_match = re.search(r'<span[^>]*>(MON|TUE|WED|THU|FRI|SAT|SUN)</span>', cells[0], re.IGNORECASE)
+                        if not day_match:
+                            continue
+                        day_name = day_match.group(1).upper()
+                        day_classes = []
+                        for cell_html in cells[1:]:
+                            stripped = re.sub(r'<[^>]+>', '', cell_html).strip()
+                            if not stripped or stripped in ['&nbsp;', '\xa0']:
                                 continue
-                            day_txt = re.sub(r'<[^>]+>', ' ', cells[0]).strip().upper()
-                            if day_txt in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']:
-                                day_classes = []
-                                for c in cells[1:]:
-                                    spans = re.findall(r'<span[^>]*>(.*?)</span>', c)
-                                    clean_spans = [
-                                        re.sub(r'<[^>]+>', '', s).strip()
-                                        for s in spans
-                                        if re.sub(r'<[^>]+>', '', s).strip() and s.strip() != '&nbsp;'
-                                    ]
-                                    if clean_spans:
-                                        subj = clean_spans[0]
-                                        if subj and subj != '&nbsp;':
-                                            day_classes.append(subj)
-                                timetable_map[day_txt] = day_classes
-                        if timetable_map:
-                            save_timetable(username, timetable_map)
-                            print(f"Timetable saved for {username}: {len(timetable_map)} days found.")
-                        break
+                            subj_matches = re.findall(r'<span\s+style="color:#161D3F;font-family:caption">(.*?)</span>', cell_html)
+                            if subj_matches:
+                                sc = subj_matches[0].strip()
+                                if sc and sc not in ['&nbsp;', '\xa0']:
+                                    day_classes.append(sc)
+                        if day_classes:
+                            timetable_map[day_name] = day_classes
+
+                    if timetable_map:
+                        save_timetable(username, timetable_map)
+                        total_slots = sum(len(v) for v in timetable_map.values())
+                        print(f"Timetable saved for {username}: {len(timetable_map)} days, {total_slots} slots found.")
+                    else:
+                        print("Notice: Timetable grid parsed 0 valid days.")
+                else:
+                    print("Notice: Could not locate Time Table button on dashboard.")
             except Exception as tt_err:
                 print("Notice: Timetable scraping skipped or encountered non-fatal error:", tt_err)
 
             # ==================================================
-            # FIND ATTENDANCE
+            # 2. FIND ATTENDANCE
             # ==================================================
 
             print()
@@ -218,52 +267,50 @@ async def get_gems_attendance(username=None, password=None):
                     f"{attempt}/6..."
                 )
 
-                attendance_link = page.get_by_text(
-                    "Attendance",
-                    exact=True
-                )
+                try:
+                    # Priority 1: Direct button locator (#semActivity is GEMS Attendance ID)
+                    att_btn = page.locator("#semActivity button, #semActivity")
+                    if await att_btn.count() > 0 and await att_btn.first.is_visible():
+                        await att_btn.first.click()
+                        attendance_clicked = True
+                        print("Clicked #semActivity button.")
+                        break
 
-                count = await attendance_link.count()
+                    # Priority 2: ExtJS component click
+                    clicked = await page.evaluate("""() => {
+                        if (window.Ext && Ext.getCmp && Ext.getCmp('semActivity')) {
+                            const cmp = Ext.getCmp('semActivity');
+                            if (cmp.btnEl && cmp.btnEl.dom) {
+                                cmp.btnEl.dom.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }""")
+                    if clicked:
+                        attendance_clicked = True
+                        print("Clicked semActivity via ExtJS component.")
+                        break
 
-                print(
-                    "Attendance elements:",
-                    count
-                )
-
-                for i in range(count):
-
-                    element = attendance_link.nth(i)
-
-                    try:
-
+                    # Priority 3: Visible text link
+                    attendance_link = page.get_by_text(
+                        "Attendance",
+                        exact=True
+                    )
+                    count = await attendance_link.count()
+                    for i in range(count):
+                        element = attendance_link.nth(i)
                         if await element.is_visible():
-
-                            print(
-                                f"Clicking Attendance "
-                                f"element {i}..."
-                            )
-
                             await element.click()
-
                             attendance_clicked = True
-
-                            print(
-                                "Attendance clicked."
-                            )
-
+                            print("Clicked Attendance text link.")
                             break
+                    if attendance_clicked:
+                        break
+                except Exception as e:
+                    print(f"Could not click Attendance {attempt}: {e}")
 
-                    except Exception as e:
-
-                        print(
-                            f"Could not click Attendance "
-                            f"{i}: {e}"
-                        )
-
-                if attendance_clicked:
-                    break
-
-                await page.wait_for_timeout(2000)
+                await page.wait_for_timeout(1500)
 
             # ==================================================
             # PROGRESS REPORT FALLBACK
@@ -641,6 +688,8 @@ async def get_gems_attendance(username=None, password=None):
                     e,
                 )
 
+            if return_timetable:
+                return attendance, timetable_map
             return attendance
 
         except PlaywrightTimeoutError as e:

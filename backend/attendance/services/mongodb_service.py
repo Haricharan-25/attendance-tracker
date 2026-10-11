@@ -61,7 +61,10 @@ def save_attendance(username, attendance):
 
     attendance_collection.update_one(
         {
-            "username": username
+            "username": {
+                "$regex": f"^{username}$",
+                "$options": "i"
+            }
         },
         {
             "$set": {
@@ -107,7 +110,10 @@ timetable_collection = db["timetable_cache"]
 def save_timetable(username, timetable):
     timetable_collection.update_one(
         {
-            "username": username
+            "username": {
+                "$regex": f"^{username}$",
+                "$options": "i"
+            }
         },
         {
             "$set": {

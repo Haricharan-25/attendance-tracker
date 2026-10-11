@@ -628,13 +628,17 @@ class SyncAttendanceView(APIView):
             prev_attended = sum(int(item.get("attended", 0)) for item in prev_attendance)
             prev_total = sum(int(item.get("total", 0)) for item in prev_attendance)
 
-            # 2. Run GEMS scraper to get latest attendance
-            data = asyncio.run(
-                get_gems_attendance(username=roll_number, password=gems_password)
+            # 2. Run GEMS scraper to get latest attendance & timetable
+            attendance_data, timetable_data = asyncio.run(
+                get_gems_attendance(
+                    username=roll_number,
+                    password=gems_password,
+                    return_timetable=True,
+                )
             )
 
-            new_attended = sum(int(item.get("attended", 0)) for item in (data or []))
-            new_total = sum(int(item.get("total", 0)) for item in (data or []))
+            new_attended = sum(int(item.get("attended", 0)) for item in (attendance_data or []))
+            new_total = sum(int(item.get("total", 0)) for item in (attendance_data or []))
 
             delta_attended = new_attended - prev_attended
             delta_total = new_total - prev_total
@@ -658,15 +662,28 @@ class SyncAttendanceView(APIView):
             # 3. Authoritatively evaluate challenges and badges
             gamification_result = evaluate_user_gamification(
                 user=request.user,
-                attendance_data=data,
+                attendance_data=attendance_data,
                 delta_attended=delta_attended,
                 delta_total=delta_total,
             )
 
+            # 4. Check timetable entries count to accurately distinguish success
+            timetable_slots_count = sum(len(v) for v in (timetable_data or {}).values())
+            timetable_synced = bool(timetable_data and timetable_slots_count > 0)
+
+            if timetable_synced:
+                sync_message = "Attendance and timetable synced successfully."
+            else:
+                sync_message = "Attendance synced successfully. Timetable not available."
+
             return Response(
                 {
-                    "message": "Attendance synced successfully.",
-                    "subject_count": len(data) if data else 0,
+                    "message": sync_message,
+                    "attendance_synced": True,
+                    "subject_count": len(attendance_data) if attendance_data else 0,
+                    "timetable_synced": timetable_synced,
+                    "timetable_count": timetable_slots_count,
+                    "timetable_days": len(timetable_data) if timetable_data else 0,
                     "streak_info": streak_info,
                     "gamification": gamification_result,
                 },
