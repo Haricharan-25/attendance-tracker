@@ -217,13 +217,33 @@ function AttendancePlanner({ syncTrigger = 0, onSyncRequest }) {
 
   if (error && !plannerData) {
     return (
-      <div className="planner-card empty-state">
-        <div className="empty-icon">📅</div>
-        <h3>Attendance Planner</h3>
-        <p className="planner-err-text">{error}</p>
-        <button className="primary-btn retry-btn" onClick={fetchPlannerData}>
-          Try Again
-        </button>
+      <div className="attendance-planner-container">
+        <div className="planner-card-header">
+          <div>
+            <h2 className="planner-title">Attendance Planner</h2>
+            <span className="planner-subtitle">What-If Attendance Simulator</span>
+          </div>
+        </div>
+        <div className="leave-mode-banner" style={{ background: "rgba(59, 130, 246, 0.12)", borderColor: "rgba(59, 130, 246, 0.4)", color: "#93c5fd", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+          <span>
+            ℹ Timetable not available. Please sync your GEMS data to load your timetable and attendance records.
+          </span>
+          {onSyncRequest && (
+            <button
+              type="button"
+              className="sync-pill-btn"
+              onClick={onSyncRequest}
+              style={{ flexShrink: 0, padding: "5px 12px", fontSize: "11px" }}
+            >
+              ↻ Sync GEMS
+            </button>
+          )}
+        </div>
+        <div style={{ textAlign: "center", padding: "12px 0" }}>
+          <button className="primary-btn retry-btn" onClick={fetchPlannerData}>
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }

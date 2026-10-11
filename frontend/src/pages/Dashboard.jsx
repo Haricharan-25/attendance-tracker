@@ -136,6 +136,12 @@ function Dashboard() {
           </button>
         </div>
 
+        {/* Attendance Planner - always visible for authenticated students */}
+        <AttendancePlanner
+          syncTrigger={syncTrigger}
+          onSyncRequest={handleOneClickSync}
+        />
+
         {syncModalOpen && (
           <div className="modal-backdrop">
             <div className="modal-sheet">
